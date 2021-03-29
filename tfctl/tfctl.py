@@ -40,6 +40,8 @@ def update_kube_config(kube_info):
     kube_conf_bkp_loc = '{0}_tfctl_{1}'.format(kube_conf_loc, current_time)
     current_kube_config = {}
     try:
+        if not os.path.isdir(os.path.dirname(kube_conf_loc)):
+            os.makedirs(os.path.dirname(kube_conf_loc), exist_ok=True)
         shutil.copy(kube_conf_loc, kube_conf_bkp_loc)
         with open(kube_conf_loc) as kube_config:
             current_kube_config = yaml.load(kube_config.read(),
@@ -109,7 +111,7 @@ def update_kube_config(kube_info):
 
         with open(kube_conf_loc, 'w') as kube_config:
             kube_config.write(yaml.safe_dump(current_kube_config))
-        return 0
+    return 0
 
 
 if tf_cmd == 'get-ssh-key':
@@ -131,20 +133,28 @@ elif tf_cmd == 'update-kubeconfig':
     tf_arguments = '-json'
     tf_work_cmd = tf_work_cmd_tpl.format(tf_env_data_dir, tf_bin,
                                          tf_cmd, tf_arguments)
-    updated_clusters = 0
+    target_clusters = []
     res = json.loads(get_command_output(tf_work_cmd))
     for key in res:
         if key.startswith('eks') and key.endswith('connect-info'):
-            res = update_kube_config(res[key])
+            if all([len(res[key]['value']['cert']) > 0,
+                    len(res[key]['value']['endpoint']) > 0,
+                    len(res[key]['value']['name']) > 0]):
+                target_clusters.append(res[key])
+
+    if len(target_clusters) > 0:
+        for cluster in target_clusters:
+            res = update_kube_config(cluster)
             if res != 0:
                 print('Error updating kubeconfig with cluster {}'.format(
-                    res[key]['value']['name'][0])
+                    cluster['value']['name'][0])
                 )
                 exit(1)
-            else:
-                updated_clusters += 1
-    print('kube config updated with {0} clusters'.format(updated_clusters))
-    exit(0)
+        print('kube config updated with {0} clusters'.format(len(target_clusters)))
+        exit(0)
+    else:
+        print("No EKS clusters description found, exiting...")
+        exit(0)
 
 tf_var_file_ref = ''
 if tf_cmd not in ["output", "taint", "state", "import"]:
