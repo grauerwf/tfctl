@@ -23,10 +23,9 @@ current_time = datetime.datetime.now().strftime('%Y-%m-%d_%H_%M_%S')
 var_file_name = ''
 
 if 'bash-completion' in sys.argv[1]:
-    bash_completion_file_loc = os.path.dirname(__file__)
-    print("add\nsource {0}/show.bash-completion\nat the end of "
+    print("add\nsource /usr/local/bin/tfctl.bash-completion\nat the end of "
           "your shell 'rc' file "
-          "(~/.bashrc, ~/.zshrc, etc...)".format(bash_completion_file_loc))
+          "(~/.bashrc, ~/.zshrc, etc...)")
     exit(0)
 
 
