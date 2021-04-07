@@ -7,8 +7,6 @@ import yaml
 import datetime
 import shutil
 
-env_id = sys.argv[1]
-tf_cmd = sys.argv[2]
 user_home = os.path.expanduser('~')
 tf_version = '0.13.4'
 tf_arguments = ' '.join(sys.argv[3:])
@@ -16,18 +14,33 @@ tf_base_dir = os.path.join(user_home, '.terraform')
 tf_bin_dir = os.path.join(tf_base_dir, 'bin')
 tf_bin = os.path.join(tf_bin_dir, 'terraform')
 tf_data_dir = os.path.join(tf_base_dir, 'data')
-tf_env_data_dir = os.path.join(tf_data_dir, env_id)
-
-
 tf_download_address_tpl = 'https://releases.hashicorp.com/terraform/' \
                           '{0}/terraform_{0}_{1}_amd64.zip'
-
 tf_vars_dir = os.path.join(os.getcwd(), 'vars')
-
 tf_work_cmd_tpl = 'TF_DATA_DIR={0} {1} {2} {3} 2>&1 | tee /tmp/tf.log'
 tf_init_cmd_tpl = 'TF_DATA_DIR={0} {1} init -backend-config="key={2}.tfstate"'
-tf_init_cmd = tf_init_cmd_tpl.format(tf_env_data_dir, tf_bin, env_id)
 current_time = datetime.datetime.now().strftime('%Y-%m-%d_%H_%M_%S')
+var_file_name = ''
+
+if 'help' in sys.argv[1]:
+    tf_cmd = 'help'
+else:
+    env_id = sys.argv[1]
+    tf_cmd = sys.argv[2]
+    tf_env_data_dir = os.path.join(tf_data_dir, env_id)
+    tf_init_cmd = tf_init_cmd_tpl.format(tf_env_data_dir, tf_bin, env_id)
+    var_file_name = '{0}.tfvars'.format(os.path.join(tf_vars_dir, env_id))
+
+
+
+def get_env_var_files_list():
+    return os.listdir(os.path.join(os.getcwd(), 'vars'))
+
+
+def completion_hook(cmd, curr_word, prev_word):
+    potential_matches = foobar()
+    matches = [k for k in potential_matches if k.startswith(curr_word)]
+    return matches
 
 
 def get_command_output(cmd):
@@ -157,11 +170,14 @@ elif tf_cmd == 'update-kubeconfig':
         exit(0)
 
 tf_var_file_ref = ''
-if tf_cmd not in ["output", "taint", "state", "import"]:
+if tf_cmd not in ["help", "output", "taint", "untaint", "state", "import"]:
     tf_var_file_ref = "--var-file={0}.tfvars".format(os.path.join(tf_vars_dir,
-                                                                  env_id))
-tf_work_cmd = tf_work_cmd_tpl.format(tf_env_data_dir, tf_bin,
-                                     tf_cmd, tf_var_file_ref)
+                                                               env_id))
+if tf_cmd not in ["help"]:
+    tf_work_cmd = tf_work_cmd_tpl.format(tf_env_data_dir, tf_bin,
+                                     tf_cmd, tf_arguments, tf_var_file_ref)
+else:
+    tf_work_cmd = '{0} {1}'.format(tf_bin, tf_cmd)
 
 tf_platform = 'linux'
 if sys.platform.startswith('darwin'):
@@ -193,22 +209,20 @@ while True:
             res = os.system(unzip_cmd_tpl.format(tf_bin_dir))
             if res != 0:
                 print("error while terraform executable file installation")
+if tf_cmd not in ["help"]:
+    if os.path.isfile(var_file_name):
+        print("varilables file found...")
+    else:
+        print("ERROR: varilables file not found,")
+        print("looking for {0}".format(var_file_name))
+        print("exiting...")
+        exit(1)
 
-VAR_FILE_NAME = '{0}.tfvars'.format(os.path.join(tf_vars_dir, env_id))
-
-if os.path.isfile(VAR_FILE_NAME):
-    print("varilables file found...")
-else:
-    print("ERROR: varilables file not found,")
-    print("looking for {0}".format(VAR_FILE_NAME))
-    print("exiting...")
-    exit(1)
-
-if os.path.isdir(tf_env_data_dir):
-    print("directory for {0} terraform data found...".format(env_id))
-else:
-    print("directory for {0} terraform data not found, creating".format(env_id))
-    os.makedirs(tf_env_data_dir)
+    if os.path.isdir(tf_env_data_dir):
+        print("directory for {0} terraform data found...".format(env_id))
+    else:
+        print("directory for {0} terraform data not found, creating".format(env_id))
+        os.makedirs(tf_env_data_dir)
 
 
 def init_and_exec():
@@ -222,5 +236,13 @@ def init_and_exec():
                 os.system('cat /tmp/tf.log')
 
 
+def main():
+    if len(sys.argv) > 2 or 'help' in sys.argv[1]:
+        init_and_exec()
+    else:
+        print("Not enough arguments, exiting...")
+        exit(1)
+
+
 if __name__ == '__main__':
-    init_and_exec()
+    main()

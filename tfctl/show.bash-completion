@@ -1,0 +1,18 @@
+_show_complete()
+{
+    local cur prev opts env_names
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+    env_names=$( find vars/*.tfvars | sed -e 's/vars\///' | sed -e 's/\.tfvars//')
+
+
+    if [[ ${cur} == -* ]] ; then
+        COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) )
+        return 0
+    fi
+
+    COMPREPLY=( $(compgen -W "${env_names}" -- ${cur}) )
+}
+
+complete -F _show_complete tfctl
