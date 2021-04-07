@@ -32,22 +32,6 @@ else:
     var_file_name = '{0}.tfvars'.format(os.path.join(tf_vars_dir, env_id))
 
 
-
-def get_env_var_files_list():
-    return os.listdir(os.path.join(os.getcwd(), 'vars'))
-
-
-def completion_hook(cmd, curr_word, prev_word):
-    potential_matches = foobar()
-    matches = [k for k in potential_matches if k.startswith(curr_word)]
-    return matches
-
-
-def get_command_output(cmd):
-    result = subprocess.run(cmd, stdout=subprocess.PIPE, shell=True)
-    return result.stdout
-
-
 def update_kube_config(kube_info):
     kube_conf_loc = os.path.join(os.path.expanduser('~'), '.kube', 'config')
     kube_conf_bkp_loc = '{0}_tfctl_{1}'.format(kube_conf_loc, current_time)
