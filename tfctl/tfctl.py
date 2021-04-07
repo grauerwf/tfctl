@@ -22,6 +22,14 @@ tf_init_cmd_tpl = 'TF_DATA_DIR={0} {1} init -backend-config="key={2}.tfstate"'
 current_time = datetime.datetime.now().strftime('%Y-%m-%d_%H_%M_%S')
 var_file_name = ''
 
+if 'bash-completion' in sys.argv[1]:
+    bash_completion_file_loc = os.path.dirname(__file__)
+    print("add\nsource {0}/show.bash-completion\nat the end of "
+          "your shell 'rc' file "
+          "(~/.bashrc, ~/.zshrc, etc...)".format(bash_completion_file_loc))
+    exit(0)
+
+
 if 'help' in sys.argv[1]:
     tf_cmd = 'help'
 else:
