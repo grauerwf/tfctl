@@ -14,7 +14,7 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url="https://github.com/grauerwf/tfctl",
     packages=setuptools.find_packages(),
-    scripts=['tfctl/show.bash-completion'],
+    scripts=['tfctl/tfctl.bash-completion'],
     entry_points={
         'console_scripts': [
             'tfctl=tfctl.tfctl:init_and_exec',
