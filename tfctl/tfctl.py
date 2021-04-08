@@ -7,6 +7,27 @@ import yaml
 import datetime
 import shutil
 
+bash_completion_script = '''
+_show_complete()
+{
+    local cur prev opts env_names
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD-1]}"
+    env_names=$( find vars/*.tfvars | sed -e 's/vars\///' | sed -e 's/\.tfvars//')
+
+
+    if [[ ${cur} == -* ]] ; then
+        COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) )
+        return 0
+    fi
+
+    COMPREPLY=( $(compgen -W "${env_names}" -- ${cur}) )
+}
+
+complete -F _show_complete tfctl
+'''
+
 user_home = os.path.expanduser('~')
 tf_version = '0.13.4'
 tf_arguments = ' '.join(sys.argv[3:])
@@ -17,15 +38,22 @@ tf_data_dir = os.path.join(tf_base_dir, 'data')
 tf_download_address_tpl = 'https://releases.hashicorp.com/terraform/' \
                           '{0}/terraform_{0}_{1}_amd64.zip'
 tf_vars_dir = os.path.join(os.getcwd(), 'vars')
-tf_work_cmd_tpl = 'TF_DATA_DIR={0} {1} {2} {3} 2>&1 | tee /tmp/tf.log'
+tf_work_cmd_tpl = 'TF_DATA_DIR={0} {1} {2} {3} {4} 2>&1 | tee /tmp/tf.log'
 tf_init_cmd_tpl = 'TF_DATA_DIR={0} {1} init -backend-config="key={2}.tfstate"'
 current_time = datetime.datetime.now().strftime('%Y-%m-%d_%H_%M_%S')
 var_file_name = ''
 
 if 'bash-completion' in sys.argv[1]:
-    print("add\nsource /usr/local/bin/tfctl.bash-completion\nat the end of "
+    bash_completion_file_loc = os.path.dirname(__file__)
+    bash_completion_file_name = os.path.join(bash_completion_file_loc,
+                                             'tfctl.bash-completion')
+    with open(bash_completion_file_name, 'w+') as bash_completion_file:
+        bash_completion_file.write(bash_completion_script)
+    os.chmod(bash_completion_file_name, 0o755)
+
+    print("add\nsource {0}/tfctl.bash-completion\nat the end of "
           "your shell 'rc' file "
-          "(~/.bashrc, ~/.zshrc, etc...)")
+          "(~/.bashrc, ~/.zshrc, etc...)".format(bash_completion_file_loc))
     exit(0)
 
 
@@ -166,7 +194,7 @@ elif tf_cmd == 'update-kubeconfig':
         exit(0)
 
 tf_var_file_ref = ''
-if tf_cmd not in ["help", "output", "taint", "untaint", "state", "import"]:
+if tf_cmd not in ["output", "taint", "untaint", "state", "import"]:
     tf_var_file_ref = "--var-file={0}.tfvars".format(os.path.join(tf_vars_dir,
                                                                env_id))
 if tf_cmd not in ["help"]:
