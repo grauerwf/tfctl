@@ -1,4 +1,6 @@
 import os
+import stat
+
 import boto3
 import sys
 import subprocess
@@ -42,6 +44,10 @@ tf_work_cmd_tpl = 'TF_DATA_DIR={0} {1} {2} {3} {4} 2>&1 | tee /tmp/tf.log'
 tf_init_cmd_tpl = 'TF_DATA_DIR={0} {1} init -backend-config="key={2}.tfstate"'
 current_time = datetime.datetime.now().strftime('%Y-%m-%d_%H_%M_%S')
 var_file_name = ''
+tf_env_data_dir = ''
+tf_init_cmd = ''
+env_id = ''
+tf_cmd = ''
 
 if 'bash-completion' in sys.argv[1]:
     bash_completion_file_loc = os.path.dirname(__file__)
@@ -62,14 +68,25 @@ if 'help' in sys.argv[1]:
 else:
     env_id = sys.argv[1]
     tf_cmd = sys.argv[2]
+    if tf_cmd in ['update-kubeconfig']:
+        tf_work_cmd_tpl = tf_work_cmd_tpl.replace('| tee', '>')
     tf_env_data_dir = os.path.join(tf_data_dir, env_id)
     tf_init_cmd = tf_init_cmd_tpl.format(tf_env_data_dir, tf_bin, env_id)
     var_file_name = '{0}.tfvars'.format(os.path.join(tf_vars_dir, env_id))
 
 
-def get_command_output(cmd):
-    result = subprocess.run(cmd, stdout=subprocess.PIPE, shell=True)
-    return result.stdout
+def init_and_exec(command):
+    os.system(command)
+    check = os.system('cat /tmp/tf.log | grep "terraform init"')
+    if check == 0:
+        init = os.system(tf_init_cmd)
+        if init == 0:
+            work = os.system(tf_work_cmd)
+            if work != 0:
+                os.system('cat /tmp/tf.log')
+                exit(1)
+    with open('/tmp/tf.log') as tf_log_file:
+        return tf_log_file.read()
 
 
 def update_kube_config(kube_info):
@@ -152,32 +169,41 @@ def update_kube_config(kube_info):
 
 
 if tf_cmd == 'get-ssh-key':
-    ss = boto3.client('secretsmanager')
+    ssm = boto3.client('ssm')
     secret_id = '{0}-ec2_ssh_key'.format(env_id)
     ssh_key_file_loc = os.path.join(user_home, '.ssh', '{0}.pem'.format(env_id))
     try:
-        ssh_key = ss.get_secret_value(SecretId=secret_id)['SecretString']
+        ssh_key = ssm.get_parameter(Name=secret_id,
+                                    WithDecryption=True)['Parameter']['Value']
         with open(ssh_key_file_loc, 'w') as ssh_key_file:
             ssh_key_file.write(ssh_key)
-        os.chmod(ssh_key_file_loc, 600)
+        os.chmod(ssh_key_file_loc, 0o600)
         print("key written to {0} and chmod'ed to 600".format(ssh_key_file_loc))
         exit(0)
-    except ss.exceptions.ResourceNotFoundException:
+    except ssm.exceptions.ParameterNotFound:
         print('Could not find requested secret value, exiting...')
+        exit(1)
+    except PermissionError:
+        print('Could not open key file "{0}" for write, exiting...'.format(ssh_key_file_loc))
         exit(1)
 elif tf_cmd == 'update-kubeconfig':
     tf_cmd = 'output'
     tf_arguments = '-json'
     tf_work_cmd = tf_work_cmd_tpl.format(tf_env_data_dir, tf_bin,
-                                         tf_cmd, tf_arguments)
+                                         tf_cmd, tf_arguments, '')
     target_clusters = []
-    res = json.loads(get_command_output(tf_work_cmd))
-    for key in res:
-        if key.startswith('eks') and key.endswith('connect-info'):
-            if all([len(res[key]['value']['cert']) > 0,
-                    len(res[key]['value']['endpoint']) > 0,
-                    len(res[key]['value']['name']) > 0]):
-                target_clusters.append(res[key])
+    res = {}
+    try:
+        res = json.loads('init_and_exec(tf_work_cmd)')
+    except json.decoder.JSONDecodeError:
+        exit(1)
+    if len(res) > 0:
+        for key in res:
+            if key.startswith('eks') and key.endswith('connect-info'):
+                if all([len(res[key]['value']['cert']) > 0,
+                        len(res[key]['value']['endpoint']) > 0,
+                        len(res[key]['value']['name']) > 0]):
+                    target_clusters.append(res[key])
 
     if len(target_clusters) > 0:
         for cluster in target_clusters:
@@ -249,20 +275,9 @@ if tf_cmd not in ["help"]:
         os.makedirs(tf_env_data_dir)
 
 
-def init_and_exec():
-    os.system(tf_work_cmd)
-    check = os.system('cat /tmp/tf.log | grep "terraform init"')
-    if check == 0:
-        init = os.system(tf_init_cmd)
-        if init == 0:
-            work = os.system(tf_work_cmd)
-            if work != 0:
-                os.system('cat /tmp/tf.log')
-
-
 def main():
     if len(sys.argv) > 2 or 'help' in sys.argv[1]:
-        init_and_exec()
+        init_and_exec(tf_work_cmd)
     else:
         print("Not enough arguments, exiting...")
         exit(1)
