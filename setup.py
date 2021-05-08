@@ -16,7 +16,7 @@ setuptools.setup(
     packages=setuptools.find_packages(),
     entry_points={
         'console_scripts': [
-            'tfctl=tfctl.tfctl:init_and_exec',
+            'tfctl=tfctl.tfctl:main',
         ],
     },
     install_requires=[
