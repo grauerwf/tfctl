@@ -194,7 +194,7 @@ elif tf_cmd == 'update-kubeconfig':
     target_clusters = []
     res = {}
     try:
-        res = json.loads('init_and_exec(tf_work_cmd)')
+        res = json.loads(init_and_exec(tf_work_cmd))
     except json.decoder.JSONDecodeError:
         exit(1)
     if len(res) > 0:
