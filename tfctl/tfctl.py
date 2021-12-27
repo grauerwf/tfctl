@@ -242,23 +242,21 @@ elif sys.platform.startswith('solaris'):
 START_CWD = os.getcwd()
 
 while True:
-    if all([os.path.isdir(tf_bin_dir),
-            os.path.exists(tf_bin),
+    if all([os.path.exists(tf_bin),
+            os.path.isdir(tf_bin_dir),
             os.access(tf_bin, os.X_OK)]):
         print('terraform executable file found...')
         break
     else:
-        tf_install_prompt = "terraform executable file not found, " \
-                            "do you want install it [Y/n]"
-        if input(tf_install_prompt).lower() in ['y', 'yes']:
-            os.makedirs(tf_bin_dir, exist_ok=True)
-            tf_download_address = tf_download_address_tpl.format(tf_version,
-                                                                 tf_platform)
-            os.system('wget {0} -O /tmp/tf.zip'.format(tf_download_address))
-            unzip_cmd_tpl = 'unzip -o /tmp/tf.zip -d {0} > /dev/null'
-            res = os.system(unzip_cmd_tpl.format(tf_bin_dir))
-            if res != 0:
-                print("error while terraform executable file installation")
+        print("terraform executable file not found, installation...")
+        os.makedirs(tf_bin_dir, exist_ok=True)
+        tf_download_address = tf_download_address_tpl.format(tf_version,
+                                                             tf_platform)
+        os.system('wget {0} -O /tmp/tf.zip'.format(tf_download_address))
+        unzip_cmd_tpl = 'unzip -o /tmp/tf.zip -d {0} > /dev/null'
+        res = os.system(unzip_cmd_tpl.format(tf_bin_dir))
+        if res != 0:
+            print("error while terraform executable file installation")
 if tf_cmd not in ["help"]:
     if os.path.isfile(var_file_name):
         print("varilables file found...")
