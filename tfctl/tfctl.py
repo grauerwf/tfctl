@@ -41,7 +41,8 @@ tf_download_address_tpl = 'https://releases.hashicorp.com/terraform/' \
                           '{0}/terraform_{0}_{1}_amd64.zip'
 tf_vars_dir = os.path.join(os.getcwd(), 'vars')
 tf_work_cmd_tpl = 'TF_DATA_DIR={0} {1} {2} {3} {4} 2>&1 | tee /tmp/tf.log'
-tf_init_cmd_tpl = 'TF_DATA_DIR={0} {1} init -backend-config="key={2}.tfstate"'
+tf_init_cmd_tpl = 'TF_DATA_DIR={0} {1} init -backend-config="{3}={2}"'
+tf_remote_state_key = 'key'
 current_time = datetime.datetime.now().strftime('%Y-%m-%d_%H_%M_%S')
 var_file_name = ''
 tf_env_data_dir = ''
@@ -68,10 +69,15 @@ if 'help' in sys.argv[1]:
 else:
     env_id = sys.argv[1]
     tf_cmd = sys.argv[2]
-    if tf_cmd in ['update-kubeconfig']:
+    if tf_cmd in ['update-kubeconfig', 'get-ssh-keys']:
         tf_work_cmd_tpl = tf_work_cmd_tpl.replace('| tee', '>')
     tf_env_data_dir = os.path.join(tf_data_dir, env_id)
-    tf_init_cmd = tf_init_cmd_tpl.format(tf_env_data_dir, tf_bin, env_id)
+    with open('backend.tf') as backend_file:
+        backend_file_content = backend_file.read()
+        if backend_file_content[1].startswith('###'):
+            tf_remote_state_key = backend_file_content.split('\n')[0].split('=')[1].strip()
+    tf_init_cmd = tf_init_cmd_tpl.format(tf_env_data_dir, tf_bin,
+                                         env_id, tf_remote_state_key)
     var_file_name = '{0}.tfvars'.format(os.path.join(tf_vars_dir, env_id))
 
 
@@ -168,24 +174,30 @@ def update_kube_config(kube_info):
     return 0
 
 
-if tf_cmd == 'get-ssh-key':
-    ssm = boto3.client('ssm')
-    secret_id = '{0}-ec2_ssh_key'.format(env_id)
-    ssh_key_file_loc = os.path.join(user_home, '.ssh', '{0}.pem'.format(env_id))
+if tf_cmd == 'get-ssh-keys':
+    tf_cmd = 'output'
+    tf_arguments = '-json'
+    tf_work_cmd = tf_work_cmd_tpl.format(tf_env_data_dir, tf_bin,
+                                         tf_cmd, tf_arguments, '')
+    target_clusters = []
+    res = {}
     try:
-        ssh_key = ssm.get_parameter(Name=secret_id,
-                                    WithDecryption=True)['Parameter']['Value']
-        with open(ssh_key_file_loc, 'w') as ssh_key_file:
-            ssh_key_file.write(ssh_key)
-        os.chmod(ssh_key_file_loc, 0o600)
-        print("key written to {0} and chmod'ed to 600".format(ssh_key_file_loc))
-        exit(0)
-    except ssm.exceptions.ParameterNotFound:
-        print('Could not find requested secret value, exiting...')
+        res = json.loads(init_and_exec(tf_work_cmd))
+    except json.decoder.JSONDecodeError:
         exit(1)
-    except PermissionError:
-        print('Could not open key file "{0}" for write, exiting...'.format(ssh_key_file_loc))
-        exit(1)
+    for output in res.keys():
+        if output.startswith('ssh_key'):
+            ssh_key = res[output]['value']
+            ssh_key_file_loc = os.path.join(user_home, '.ssh', '{0}{1}.pem'.format(env_id, output.replace('ssh_key', '')))
+            try:
+                with open(ssh_key_file_loc, 'w') as ssh_key_file:
+                    ssh_key_file.write(ssh_key)
+                os.chmod(ssh_key_file_loc, 0o600)
+                print("key written to {0} and chmod'ed to 600".format(ssh_key_file_loc))
+            except PermissionError:
+                print('Could not open key file "{0}" for write, exiting...'.format(ssh_key_file_loc))
+                exit(1)
+    exit(0)
 elif tf_cmd == 'update-kubeconfig':
     tf_cmd = 'output'
     tf_arguments = '-json'
@@ -199,7 +211,7 @@ elif tf_cmd == 'update-kubeconfig':
         exit(1)
     if len(res) > 0:
         for key in res:
-            if key.startswith('eks') and key.endswith('connect-info'):
+            if key.startswith('k8s') and key.endswith('connect-info'):
                 if all([len(res[key]['value']['cert']) > 0,
                         len(res[key]['value']['endpoint']) > 0,
                         len(res[key]['value']['name']) > 0]):
@@ -216,7 +228,7 @@ elif tf_cmd == 'update-kubeconfig':
         print('kube config updated with {0} clusters'.format(len(target_clusters)))
         exit(0)
     else:
-        print("No EKS clusters description found, exiting...")
+        print("No k8s clusters description found, exiting...")
         exit(0)
 
 tf_var_file_ref = ''
