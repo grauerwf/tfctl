@@ -73,9 +73,9 @@ else:
         tf_work_cmd_tpl = tf_work_cmd_tpl.replace('| tee', '>')
     tf_env_data_dir = os.path.join(tf_data_dir, env_id)
     with open('backend.tf') as backend_file:
-        backend_file_content = backend_file.read()
-        if backend_file_content[1].startswith('###'):
-            tf_remote_state_key = backend_file_content.split('\n')[0].split('=')[1].strip()
+        backend_file_content = backend_file.read().split('\n')
+        if backend_file_content[0].startswith('###'):
+            tf_remote_state_key = backend_file_content[0].split('=')[1].strip()
     tf_init_cmd = tf_init_cmd_tpl.format(tf_env_data_dir, tf_bin,
                                          env_id, tf_remote_state_key)
     var_file_name = '{0}.tfvars'.format(os.path.join(tf_vars_dir, env_id))
