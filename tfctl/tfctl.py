@@ -1,13 +1,12 @@
 import os
-import stat
-
-import boto3
 import sys
-import subprocess
+import urllib.request
+import urllib.error
 import json
 import yaml
 import datetime
 import shutil
+import platform
 
 bash_completion_script = '''
 _show_complete()
@@ -31,14 +30,14 @@ complete -F _show_complete tfctl
 '''
 
 user_home = os.path.expanduser('~')
-tf_version = '1.1.2'
+tf_version = '1.1.9'
 tf_arguments = ' '.join(sys.argv[3:])
 tf_base_dir = os.path.join(user_home, '.terraform')
 tf_bin_dir = os.path.join(tf_base_dir, 'bin')
 tf_bin = os.path.join(tf_bin_dir, 'terraform')
 tf_data_dir = os.path.join(tf_base_dir, 'data')
 tf_download_address_tpl = 'https://releases.hashicorp.com/terraform/' \
-                          '{0}/terraform_{0}_{1}_amd64.zip'
+                          '{0}/terraform_{0}_{1}_{2}.zip'
 tf_vars_dir = os.path.join(os.getcwd(), 'vars')
 tf_work_cmd_tpl = 'TF_DATA_DIR={0} {1} {2} {3} {4} 2>&1 | tee /tmp/tf.log'
 tf_init_cmd_tpl = 'TF_DATA_DIR={0} {1} init -backend-config="{3}={2}"'
@@ -62,9 +61,7 @@ if 'bash-completion' in sys.argv[1]:
           "your shell 'rc' file "
           "(~/.bashrc, ~/.zshrc, etc...)".format(bash_completion_file_loc))
     exit(0)
-
-
-if 'help' in sys.argv[1]:
+elif 'help' in sys.argv[1]:
     tf_cmd = 'help'
 else:
     env_id = sys.argv[1]
@@ -241,34 +238,41 @@ if tf_cmd not in ["help"]:
 else:
     tf_work_cmd = '{0} {1}'.format(tf_bin, tf_cmd)
 
-tf_platform = 'linux'
-if sys.platform.startswith('darwin'):
-    tf_platform = 'darwin'
-elif sys.platform.startswith('freebsd'):
-    tf_platform = 'freebsd'
-elif sys.platform.startswith('win32'):
-    tf_platform = 'windows'
-elif sys.platform.startswith('solaris'):
-    tf_platform = 'solaris'
+if sys.platform.startswith('win32'):
+    os_type = 'windows'
+else:
+    os_type = sys.platform
+
+if platform.machine() in ['AMD64', 'x86_64']:
+    cpu_family = 'amd64'
+elif platform.machine() == 'i386':
+    cpu_family = '386'
+else:
+    cpu_family = platform.machine()
 
 START_CWD = os.getcwd()
 
-while True:
-    if all([os.path.exists(tf_bin),
-            os.path.isdir(tf_bin_dir),
-            os.access(tf_bin, os.X_OK)]):
-        print('terraform executable file found...')
-        break
-    else:
-        print("terraform executable file not found, installation...")
-        os.makedirs(tf_bin_dir, exist_ok=True)
-        tf_download_address = tf_download_address_tpl.format(tf_version,
-                                                             tf_platform)
-        os.system('wget {0} -O /tmp/tf.zip'.format(tf_download_address))
-        unzip_cmd_tpl = 'unzip -o /tmp/tf.zip -d {0} > /dev/null'
-        res = os.system(unzip_cmd_tpl.format(tf_bin_dir))
-        if res != 0:
-            print("error while terraform executable file installation")
+
+if all([os.path.exists(tf_bin),
+        os.path.isdir(tf_bin_dir),
+        os.access(tf_bin, os.X_OK)]):
+    print('terraform executable file found...')
+else:
+    print("terraform executable file not found, installation...")
+    os.makedirs(tf_bin_dir, exist_ok=True)
+    tf_download_address = tf_download_address_tpl.format(tf_version,
+                                                         os_type, cpu_family)
+    try:
+        urllib.request.urlretrieve(tf_download_address, '/tmp/tf.zip')
+    except urllib.error.HTTPError as exc:
+        print('Could not get Terraform version for platform '
+              '"{0}" and CPU family "{1}"'.format(os_type, cpu_family))
+        exit(1)
+
+    unzip_cmd_tpl = 'unzip -o /tmp/tf.zip -d {0} > /dev/null'
+    res = os.system(unzip_cmd_tpl.format(tf_bin_dir))
+    if res != 0:
+        print("error while terraform executable file installation")
 if tf_cmd not in ["help"]:
     if os.path.isfile(var_file_name):
         print("varilables file found...")
