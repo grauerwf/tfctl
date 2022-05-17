@@ -67,7 +67,8 @@ else:
     env_id = sys.argv[1]
     tf_cmd = sys.argv[2]
     if tf_cmd in ['update-kubeconfig', 'get-ssh-keys']:
-        tf_work_cmd_tpl = tf_work_cmd_tpl.replace('| tee', '>')
+        tf_work_cmd_tpl = tf_work_cmd_tpl.replace('2>&1 | tee', '>')
+        tf_work_cmd_tpl += ' 2>&1'
     tf_env_data_dir = os.path.join(tf_data_dir, env_id)
     with open('backend.tf') as backend_file:
         backend_file_content = backend_file.read().split('\n')
@@ -141,10 +142,11 @@ def update_kube_config(kube_info):
             'name': kube_info['value']['name'][0],
             'user': {
                 'exec': {
-                    'apiVersion': 'client.authentication.k8s.io/v1alpha1',
+                    'apiVersion': 'client.authentication.k8s.io/v1',
                     'args': ['token', '-i', kube_info['value']['name'][0]],
                     'command': 'aws-iam-authenticator',
-                    'env': None
+                    'env': None,
+                    'interactiveMode': 'Never'
                 }
             }
         }
