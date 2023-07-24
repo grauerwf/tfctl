@@ -30,7 +30,7 @@ complete -F _show_complete tfctl
 '''
 
 user_home = os.path.expanduser('~')
-tf_version = '1.1.9'
+tf_version = '1.5.3'
 tf_arguments = ' '.join(sys.argv[3:])
 tf_base_dir = os.path.join(user_home, '.terraform')
 tf_bin_dir = os.path.join(tf_base_dir, 'bin')
