@@ -30,7 +30,7 @@ complete -F _show_complete tfctl
 '''
 
 user_home = os.path.expanduser('~')
-tf_version = '1.5.3'
+tf_version = '1.6.2'
 tf_arguments = ' '.join(sys.argv[3:])
 tf_base_dir = os.path.join(user_home, '.terraform')
 tf_bin_dir = os.path.join(tf_base_dir, 'bin')
@@ -249,6 +249,8 @@ if platform.machine() in ['AMD64', 'x86_64']:
     cpu_family = 'amd64'
 elif platform.machine() == 'i386':
     cpu_family = '386'
+elif platform.machine() == 'aarch64':
+    cpu_family = 'arm64'
 else:
     cpu_family = platform.machine()
 
