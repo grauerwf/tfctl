@@ -1,2 +1,4 @@
-boto3
-PyYAML
+boto3==1.40.28
+PyYAML==6.0.2
+requests==2.32.5
+tqdm==4.67.1

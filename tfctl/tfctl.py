@@ -1,6 +1,7 @@
 import os
 import sys
-import urllib.request
+from tqdm import tqdm
+import requests
 import urllib.error
 import json
 import yaml
@@ -40,7 +41,7 @@ tf_download_address_tpl = 'https://releases.hashicorp.com/terraform/' \
                           '{0}/terraform_{0}_{1}_{2}.zip'
 tf_vars_dir = os.path.join(os.getcwd(), 'vars')
 tf_work_cmd_tpl = 'TF_DATA_DIR={0} {1} {2} {3} {4} 2>&1 | tee /tmp/tf.log'
-tf_init_cmd_tpl = 'TF_DATA_DIR={0} {1} init -backend-config="{3}={2}"'
+tf_init_cmd_tpl = 'TF_DATA_DIR={0} {1} init -backend-config="{3}={2}.tfstate"'
 tf_remote_state_key = 'key'
 current_time = datetime.datetime.now().strftime('%Y-%m-%d_%H_%M_%S')
 var_file_name = ''
@@ -49,35 +50,37 @@ tf_init_cmd = ''
 env_id = ''
 tf_cmd = ''
 
-if 'bash-completion' in sys.argv[1]:
-    bash_completion_file_loc = os.path.dirname(__file__)
-    bash_completion_file_name = os.path.join(bash_completion_file_loc,
-                                             'tfctl.bash-completion')
-    with open(bash_completion_file_name, 'w+') as bash_completion_file:
-        bash_completion_file.write(bash_completion_script)
-    os.chmod(bash_completion_file_name, 0o755)
+if len(sys.argv) > 1:
+    if 'bash-completion' in sys.argv[1]:
+        bash_completion_file_loc = os.path.dirname(__file__)
+        bash_completion_file_name = os.path.join(bash_completion_file_loc,
+                                                 'tfctl.bash-completion')
+        with open(bash_completion_file_name, 'w+') as bash_completion_file:
+            bash_completion_file.write(bash_completion_script)
+        os.chmod(bash_completion_file_name, 0o755)
 
-    print("add\nsource {0}/tfctl.bash-completion\nat the end of "
-          "your shell 'rc' file "
-          "(~/.bashrc, ~/.zshrc, etc...)".format(bash_completion_file_loc))
-    exit(0)
-elif 'help' in sys.argv[1]:
-    tf_cmd = 'help'
+        print("add\nsource {0}/tfctl.bash-completion\nat the end of "
+              "your shell 'rc' file "
+              "(~/.bashrc, ~/.zshrc, etc...)".format(bash_completion_file_loc))
+        exit(0)
+    elif 'help' in sys.argv[1]:
+        tf_cmd = 'help'
+    else:
+        env_id = sys.argv[1]
+        tf_cmd = sys.argv[2]
+        if tf_cmd in ['update-kubeconfig', 'get-ssh-keys']:
+            tf_work_cmd_tpl = tf_work_cmd_tpl.replace('2>&1 | tee', '>')
+            tf_work_cmd_tpl += ' 2>&1'
+        tf_env_data_dir = os.path.join(tf_data_dir, env_id)
+        with open('backend.tf') as backend_file:
+            backend_file_content = backend_file.read().split('\n')
+            if backend_file_content[0].startswith('###'):
+                tf_remote_state_key = backend_file_content[0].split('=')[1].strip()
+        tf_init_cmd = tf_init_cmd_tpl.format(tf_env_data_dir, tf_bin,
+                                             env_id, tf_remote_state_key)
+        var_file_name = '{0}.tfvars'.format(os.path.join(tf_vars_dir, env_id))
 else:
-    env_id = sys.argv[1]
-    tf_cmd = sys.argv[2]
-    if tf_cmd in ['update-kubeconfig', 'get-ssh-keys']:
-        tf_work_cmd_tpl = tf_work_cmd_tpl.replace('2>&1 | tee', '>')
-        tf_work_cmd_tpl += ' 2>&1'
-    tf_env_data_dir = os.path.join(tf_data_dir, env_id)
-    with open('backend.tf') as backend_file:
-        backend_file_content = backend_file.read().split('\n')
-        if backend_file_content[0].startswith('###'):
-            tf_remote_state_key = backend_file_content[0].split('=')[1].strip()
-    tf_init_cmd = tf_init_cmd_tpl.format(tf_env_data_dir, tf_bin,
-                                         env_id, tf_remote_state_key)
-    var_file_name = '{0}.tfvars'.format(os.path.join(tf_vars_dir, env_id))
-
+    tf_cmd = 'help'
 
 def init_and_exec(command):
     os.system(command)
@@ -183,6 +186,7 @@ if tf_cmd == 'get-ssh-keys':
     try:
         res = json.loads(init_and_exec(tf_work_cmd))
     except json.decoder.JSONDecodeError:
+        print('Could not read and transform Terraform outputs to JSON')
         exit(1)
     for output in res.keys():
         if output.startswith('ssh_key'):
@@ -267,8 +271,18 @@ else:
     tf_download_address = tf_download_address_tpl.format(tf_version,
                                                          os_type, cpu_family)
     try:
-        urllib.request.urlretrieve(tf_download_address, '/tmp/tf.zip')
-    except urllib.error.HTTPError as exc:
+        response = requests.get(tf_download_address, stream=True)
+        total = int(response.headers.get('content-length', 0))
+
+        with open('/tmp/tf.zip', "wb") as handle:
+            chunk_size = 1024 * 1024
+            with tqdm(total=total, unit='B', unit_scale=True, desc="Downloading") as pbar:
+                for chunk in response.iter_content(chunk_size=chunk_size):
+                    if chunk:
+                        handle.write(chunk)
+                        pbar.update(len(chunk))
+
+    except requests.exceptions.RequestException as exc:
         print('Could not get Terraform version for platform '
               '"{0}" and CPU family "{1}"'.format(os_type, cpu_family))
         exit(1)
@@ -279,9 +293,9 @@ else:
         print("error while terraform executable file installation")
 if tf_cmd not in ["help"]:
     if os.path.isfile(var_file_name):
-        print("varilables file found...")
+        print("variables file found...")
     else:
-        print("ERROR: varilables file not found,")
+        print("ERROR: variables file not found,")
         print("looking for {0}".format(var_file_name))
         print("exiting...")
         exit(1)
@@ -294,8 +308,9 @@ if tf_cmd not in ["help"]:
 
 
 def main():
-    if len(sys.argv) > 2 or 'help' in sys.argv[1]:
-        init_and_exec(tf_work_cmd)
+    if len(sys.argv) > 1:
+        if len(sys.argv) > 2 or 'help' in sys.argv[1]:
+            init_and_exec(tf_work_cmd)
     else:
         print("Not enough arguments, exiting...")
         exit(1)
