@@ -113,10 +113,10 @@ def update_kube_config(kube_info):
     cluster_exists = False
     if len(current_kube_config) > 0:
         for current_cluster in current_kube_config['clusters']:
-            if current_cluster['name'] == kube_info['value']['name'][0]:
-                cluster_props = current_cluster['cluster']
-                cluster_props['certificate-authority-data'] = kube_info['value']['cert']
-                cluster_props['server'] = kube_info['value']['endpoint']
+            if current_cluster['name'] == kube_info['value']['cluster_name'][0]:
+                cluster_props = current_cluster['cluster_name']
+                cluster_props['certificate-authority-data'] = kube_info['value']['cluster_certificate']
+                cluster_props['server'] = kube_info['value']['cluster_endpoint']
                 cluster_exists = True
                 break
     else:
@@ -124,29 +124,29 @@ def update_kube_config(kube_info):
         current_kube_config['kind'] = 'Config'
         current_kube_config['preferences'] = {}
     if not cluster_exists:
-        kube_info_cert = kube_info['value']['cert'][0][0]['data']
+        kube_info_cert = kube_info['value']['cluster_certificate']
         cluster_desc = {
-            'name': kube_info['value']['name'][0],
+            'name': kube_info['value']['cluster_name'],
             'cluster': {
                 'certificate-authority-data': kube_info_cert,
-                'server': kube_info['value']['endpoint'][0]
+                'server': kube_info['value']['cluster_endpoint']
             }
         }
         context_desc = {
-            'name': kube_info['value']['name'][0],
+            'name': kube_info['value']['cluster_name'],
             'context': {
-                'cluster': kube_info['value']['name'][0],
+                'cluster': kube_info['value']['cluster_name'],
                 'namespace': 'default',
-                'user': kube_info['value']['name'][0]
+                'user': kube_info['value']['cluster_name']
             }
         }
 
         user_desc = {
-            'name': kube_info['value']['name'][0],
+            'name': kube_info['value']['cluster_name'],
             'user': {
                 'exec': {
                     'apiVersion': 'client.authentication.k8s.io/v1',
-                    'args': ['token', '-i', kube_info['value']['name'][0]],
+                    'args': ['token', '-i', kube_info['value']['cluster_name']],
                     'command': 'aws-iam-authenticator',
                     'env': None,
                     'interactiveMode': 'Never'
@@ -215,9 +215,9 @@ elif tf_cmd == 'update-kubeconfig':
     if len(res) > 0:
         for key in res:
             if key.startswith('k8s') and key.endswith('connect-info'):
-                if all([len(res[key]['value']['cert']) > 0,
-                        len(res[key]['value']['endpoint']) > 0,
-                        len(res[key]['value']['name']) > 0]):
+                if all([len(res[key]['value']['cluster_certificate']) > 0,
+                        len(res[key]['value']['cluster_endpoint']) > 0,
+                        len(res[key]['value']['cluster_name']) > 0]):
                     target_clusters.append(res[key])
 
     if len(target_clusters) > 0:
