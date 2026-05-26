@@ -40,7 +40,7 @@ tf_data_dir = os.path.join(tf_base_dir, 'data')
 tf_download_address_tpl = 'https://releases.hashicorp.com/terraform/' \
                           '{0}/terraform_{0}_{1}_{2}.zip'
 tf_vars_dir = os.path.join(os.getcwd(), 'vars')
-tf_work_cmd_tpl = 'TF_DATA_DIR={0} {1} {2} {3} {4} 2>&1 | tee /tmp/tf.log'
+tf_work_cmd_tpl = 'TF_DATA_DIR={0} {1} {2} {4} {3} 2>&1 | tee /tmp/tf.log'
 tf_init_cmd_tpl = 'TF_DATA_DIR={0} {1} init -backend-config="{3}={2}.tfstate"'
 tf_remote_state_key = 'key'
 current_time = datetime.datetime.now().strftime('%Y-%m-%d_%H_%M_%S')
@@ -235,8 +235,8 @@ elif tf_cmd == 'update-kubeconfig':
         exit(0)
 
 tf_var_file_ref = ''
-if tf_cmd not in ["output", "state"]:
-    tf_var_file_ref = "--var-file={0}.tfvars".format(os.path.join(tf_vars_dir,
+if tf_cmd not in ['output', 'state', 'taint', 'untaint']:
+    tf_var_file_ref = '--var-file={0}.tfvars'.format(os.path.join(tf_vars_dir,
                                                                env_id))
 if tf_cmd not in ["help"]:
     tf_work_cmd = tf_work_cmd_tpl.format(tf_env_data_dir, tf_bin,
