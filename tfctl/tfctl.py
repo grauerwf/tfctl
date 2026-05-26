@@ -235,7 +235,7 @@ elif tf_cmd == 'update-kubeconfig':
         exit(0)
 
 tf_var_file_ref = ''
-if tf_cmd not in ["output", "taint", "untaint", "state", "import"]:
+if tf_cmd not in ["output", "state"]:
     tf_var_file_ref = "--var-file={0}.tfvars".format(os.path.join(tf_vars_dir,
                                                                env_id))
 if tf_cmd not in ["help"]:
